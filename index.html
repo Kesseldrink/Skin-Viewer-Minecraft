@@ -47,12 +47,12 @@
             font-weight: 700;
         }
 
-        /* --- 1. SUCHFELD (Jetzt ganz oben) --- */
+        /* --- 1. SUCHFELD (Oben) --- */
         .search-box {
             display: flex;
             gap: 10px;
             width: 100%;
-            margin-bottom: 25px; /* Abstand nach unten zur Figur */
+            margin-bottom: 25px;
         }
 
         input[type="text"] {
@@ -88,13 +88,13 @@
             transform: translateY(-2px);
         }
 
-        /* --- 2. 3D FIGUR (In der Mitte) --- */
+        /* --- 2. 3D FIGUR (Mitte) --- */
         #skin_container {
             width: 250px;
             height: 350px;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 16px;
-            margin-bottom: 25px; /* Abstand nach unten zum Download-Button */
+            margin-bottom: 25px;
             border: 1px solid rgba(255, 255, 255, 0.05);
             overflow: hidden;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
@@ -103,7 +103,7 @@
             align-items: center;
         }
 
-        /* --- 3. DOWNLOAD BUTTON (Ganz unten) --- */
+        /* --- 3. DOWNLOAD BUTTON (Unten) --- */
         .btn-download {
             width: 100%;
             background: linear-gradient(135deg, #10b981, #059669);
@@ -139,8 +139,7 @@
         
         <!-- 1. SUCHE -->
         <div class="search-box">
-            <!-- ID umbenannt, damit Bitwarden uns in Ruhe lässt -->
-            <input type="text" id="player_search_box" placeholder="z.B. Thies" autocomplete="off" spellcheck="false" data-lpignore="true" onkeydown="if(event.key === 'Enter') searchSkin()">
+            <input type="text" id="player_search_box" placeholder="Spielername eingeben..." autocomplete="off" spellcheck="false" data-lpignore="true" onkeydown="if(event.key === 'Enter') searchSkin()">
             <button class="btn-search" onclick="searchSkin()">Suchen</button>
         </div>
 
@@ -169,7 +168,7 @@
         viewer.animations.add(skinview3d.WalkingAnimation);
         viewer.animations.add(skinview3d.RotatingAnimation);
 
-        // Suchfunktion über die neue Minotar-API
+        // Suchfunktion über die Ashcon API (Bulletproof gegen CORS)
         async function searchSkin() {
             const username = document.getElementById("player_search_box").value.trim();
             if (!username) return;
@@ -177,24 +176,27 @@
             document.getElementById("loading_text").style.display = "block";
             currentUsername = username;
 
-            // Wir nutzen jetzt minotar.net, das umgeht die Sicherheitsblockaden!
-            const apiUrl = `https://minotar.net/skin/${username}`;
+            // Diese API liefert uns direkt den Base64-Textcode des Bildes
+            const apiUrl = `https://api.ashcon.app/mojang/v2/user/${username}`;
 
             try {
-                // Wir laden das Bild lokal herunter, damit wir es speichern können
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
                     throw new Error("Fehler beim Laden");
                 }
 
-                const blob = await response.blob();
+                const data = await response.json();
                 
-                if (currentSkinURL) {
-                    URL.revokeObjectURL(currentSkinURL);
+                // Prüfen, ob der Spieler überhaupt einen Skin hat
+                if (!data.textures || !data.textures.skin || !data.textures.skin.data) {
+                    throw new Error("Kein Skin vorhanden");
                 }
 
-                currentSkinURL = URL.createObjectURL(blob);
+                // Wir bauen uns das Bild aus dem Text-Code zusammen (Base64)
+                const base64Skin = "data:image/png;base64," + data.textures.skin.data;
+                
+                currentSkinURL = base64Skin;
 
                 // Modell laden
                 viewer.loadSkin(currentSkinURL);
@@ -206,6 +208,7 @@
             } catch (error) {
                 document.getElementById("loading_text").style.display = "none";
                 alert(`Der Skin für "${username}" konnte nicht gefunden werden. Hast du dich vertippt?`);
+                console.error("Fehlerdetails:", error);
             }
         }
 
