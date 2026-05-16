@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Skin Suchmaschine</title>
-    
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+    <title>Minecraft 3D Skin Viewer</title>
 
-    <!-- skinview3d Bibliothek -->
-    <script src="https://unpkg.com/skinview3d@3.0.0/bundles/skinview3d.bundle.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧍</text></svg>">
+
+    <script src="https://cdn.jsdelivr.net/npm/skinview3d@3.0.0/bundles/skinview3d.bundle.min.js"></script>
 
     <style>
         body, html {
@@ -47,12 +46,12 @@
             font-weight: 700;
         }
 
-        /* --- 1. SUCHFELD (Oben) --- */
-        .search-box {
+        /* --- 1. SUCHFELD (Ganz oben) --- */
+        .input-group {
             display: flex;
             gap: 10px;
             width: 100%;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
 
         input[type="text"] {
@@ -71,7 +70,7 @@
             border-color: #3b82f6;
         }
 
-        .btn-search {
+        .input-group button {
             background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white;
             border: none;
@@ -83,28 +82,45 @@
             transition: all 0.2s;
         }
 
-        .btn-search:hover {
+        .input-group button:hover {
             background: linear-gradient(135deg, #60a5fa, #3b82f6);
             transform: translateY(-2px);
         }
 
-        /* --- 2. 3D FIGUR (Mitte) --- */
-        #skin_container {
-            width: 250px;
-            height: 350px;
-            background: rgba(0, 0, 0, 0.2);
+        /* --- 2. 3D FIGUR BEREICH (In der Mitte) --- */
+        .skin-display {
+            display: none; /* Wird erst sichtbar, wenn gesucht wird */
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 20px;
             border-radius: 16px;
-            margin-bottom: 25px;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            overflow: hidden;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            margin-bottom: 25px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
-        /* --- 3. DOWNLOAD BUTTON (Unten) --- */
+        #player-name-display {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #3b82f6;
+        }
+
+        #skin-canvas {
+            cursor: grab;
+            outline: none;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+            display: block;
+            margin: 0 auto;
+        }
+
+        #skin-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* --- 3. DOWNLOAD BUTTON (Ganz unten) --- */
         .btn-download {
+            display: none; /* Wird auch erst nach der Suche eingeblendet */
             width: 100%;
             background: linear-gradient(135deg, #10b981, #059669);
             color: white;
@@ -118,72 +134,102 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .btn-download:hover:not(:disabled) {
+        .btn-download:hover {
             background: linear-gradient(135deg, #34d399, #10b981);
             transform: translateY(-2px);
         }
 
-        .btn-download:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-            color: #94a3b8;
+        /* Fehler-Meldung */
+        #error-message {
+            color: #ed4245;
+            display: none;
+            margin-bottom: 20px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>Skin Suche 🔍</h1>
-        
-        <!-- 1. SUCHE -->
-        <div class="search-box">
-            <!-- Bitwarden Fix durch geänderte ID und autocomplete="off" -->
-            <input type="text" id="player_search_box" placeholder="Spielername eingeben..." autocomplete="off" spellcheck="false" data-lpignore="true" onkeydown="if(event.key === 'Enter') searchSkin()">
-            <button class="btn-search" onclick="searchSkin()">Suchen</button>
+        <h1>Skin Viewer 3D 🗡️</h1>
+
+        <div class="input-group">
+            <input type="text" id="mc-player-query" placeholder="Minecraft Name..." autocomplete="new-password" data-lpignore="true" onkeydown="if(event.key === 'Enter') fetchSkin()">
+            <button onclick="fetchSkin()">Suchen</button>
         </div>
 
-        <!-- 2. 3D FIGUR -->
-        <div id="skin_container"></div>
+        <div id="error-message">Spieler wurde nicht gefunden!</div>
 
-        <!-- 3. DOWNLOAD -->
-        <button class="btn-download" id="download_btn" onclick="downloadSkin()" disabled>
+        <div id="skin-display" class="skin-display">
+            <div id="player-name-display">Name</div>
+            <div class="images-container">
+                <canvas id="skin-canvas"></canvas>
+            </div>
+        </div>
+
+        <button id="download_btn" class="btn-download" onclick="downloadSkin()">
             📥 Skin herunterladen
         </button>
     </div>
 
     <script>
+        let skinViewer;
         let currentUsername = "";
 
-        // 3D-Viewer Setup
-        const viewer = new skinview3d.SkinViewer({
-            container: document.getElementById("skin_container"),
-            width: 250,
-            height: 350
-        });
-
-        viewer.animations.add(skinview3d.WalkingAnimation);
-        viewer.animations.add(skinview3d.RotatingAnimation);
-
-        function searchSkin() {
-            const username = document.getElementById("player_search_box").value.trim();
-            if (!username) return;
+        function fetchSkin() {
+            const username = document.getElementById('mc-player-query').value.trim();
+            if (username === "") return;
 
             currentUsername = username;
 
-            // Wir geben den Link direkt an das Modell weiter. Das klappt sofort.
-            const skinUrl = `https://minotar.net/skin/${username}`;
-            viewer.loadSkin(skinUrl);
+            const skinDisplay = document.getElementById('skin-display');
+            const errorMessage = document.getElementById('error-message');
+            const nameDisplay = document.getElementById('player-name-display');
+            const downloadBtn = document.getElementById('download_btn');
 
-            // Download Button aktivieren
-            document.getElementById('download_btn').disabled = false;
+            errorMessage.style.display = 'none';
+            nameDisplay.innerText = username;
+
+            // Die funktionierende Minotar URL für den Skin
+            const skinUrl = `https://minotar.net/skin/${username}`;
+
+            // Sichtbarkeit einschalten
+            skinDisplay.style.display = 'block';
+            downloadBtn.style.display = 'block';
+
+            if (!skinViewer) {
+                // Wenn der Viewer noch nicht existiert, neu bauen
+                skinViewer = new skinview3d.SkinViewer({
+                    canvas: document.getElementById("skin-canvas"),
+                    width: 250,
+                    height: 350,
+                    skin: skinUrl
+                });
+
+                // Maus-Steuerung aktivieren
+                const control = skinview3d.createOrbitControls(skinViewer);
+                control.enableRotate = true;
+                control.enableZoom = true; 
+                control.enablePan = false;
+
+                // Geh-Animation starten
+                skinViewer.animation = new skinview3d.WalkingAnimation();
+                skinViewer.animation.speed = 0.5;
+
+            } else {
+                // Wenn er existiert, nur die Textur neu laden
+                skinViewer.loadSkin(skinUrl).catch(e => {
+                    skinDisplay.style.display = 'none';
+                    downloadBtn.style.display = 'none';
+                    errorMessage.style.display = 'block';
+                });
+            }
         }
 
+        // Die downloadSkin-Funktion nutzt den Minotar Direct-Download
         function downloadSkin() {
             if (!currentUsername) return;
 
-            // Minotar bietet einen speziellen Download-Link an, der den fertigen Skin direkt speichert!
             const downloadUrl = `https://minotar.net/download/${currentUsername}`;
 
             const a = document.createElement("a");
