@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Skin Viewer 3D</title>
+    <title>Minecraft Skin Suchmaschine</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
 
-    <!-- Die Bibliothek, die aus 2D-Bildern 3D-Modelle macht -->
+    <!-- skinview3d Bibliothek -->
     <script src="https://unpkg.com/skinview3d@3.0.0/bundles/skinview3d.bundle.js"></script>
 
     <style>
@@ -47,7 +47,6 @@
             font-weight: 700;
         }
 
-        /* Der Container für das 3D-Modell */
         #skin_container {
             width: 250px;
             height: 350px;
@@ -57,43 +56,54 @@
             border: 1px solid rgba(255, 255, 255, 0.05);
             overflow: hidden;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-        }
-
-        /* --- BUTTONS & INPUTS --- */
-        .btn-group {
             display: flex;
-            flex-direction: column;
-            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- SUCHFELD & BUTTONS --- */
+        .search-box {
+            display: flex;
+            gap: 10px;
             width: 100%;
+            margin-bottom: 15px;
         }
 
-        /* Versteckt den hässlichen Standard-Datei-Upload */
-        input[type="file"] {
-            display: none;
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 15px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            background-color: rgba(15, 23, 42, 0.6);
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s;
         }
 
-        /* Label fungiert als cooler Button für den Upload */
-        .custom-file-upload {
+        input[type="text"]:focus {
+            border-color: #3b82f6;
+        }
+
+        .btn-search {
             background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white;
             border: none;
-            padding: 15px;
+            padding: 0 20px;
             font-size: 16px;
             font-weight: bold;
             border-radius: 12px;
             cursor: pointer;
             transition: all 0.2s;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            display: inline-block;
         }
 
-        .custom-file-upload:hover {
+        .btn-search:hover {
             background: linear-gradient(135deg, #60a5fa, #3b82f6);
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
         }
 
         .btn-download {
+            width: 100%;
             background: linear-gradient(135deg, #10b981, #059669);
             color: white;
             border: none;
@@ -109,7 +119,6 @@
         .btn-download:hover {
             background: linear-gradient(135deg, #34d399, #10b981);
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
         }
 
         .btn-download:disabled {
@@ -124,74 +133,87 @@
 <body>
 
     <div class="container">
-        <h1>Skin Viewer 🎮</h1>
+        <h1>Skin Suche 🔍</h1>
         
-        <!-- Hier rendert skinview3d das Modell rein -->
-        <div id="skin_container"></div>
-
-        <div class="btn-group">
-            <!-- Upload Button -->
-            <label class="custom-file-upload">
-                <input type="file" id="skin_upload" accept=".png">
-                📁 Skin auswählen (PNG)
-            </label>
-
-            <!-- Download Button (standardmäßig deaktiviert, bis man was hochlädt) -->
-            <button class="btn-download" id="download_btn" onclick="downloadSkin()" disabled>
-                📥 Skin herunterladen
-            </button>
+        <div id="skin_container">
+            <span id="loading_text" style="color: #64748b; font-weight: bold; display: none;">Lädt Skin...</span>
         </div>
+
+        <div class="search-box">
+            <!-- Namen eingeben. Enter-Taste löst die Suche auch aus. -->
+            <input type="text" id="username_input" placeholder="z.B. Thies" onkeydown="if(event.key === 'Enter') searchSkin()">
+            <button class="btn-search" onclick="searchSkin()">Suchen</button>
+        </div>
+
+        <button class="btn-download" id="download_btn" onclick="downloadSkin()" disabled>
+            📥 Skin herunterladen
+        </button>
     </div>
 
     <script>
-        // 1. Variablen vorbereiten
         let currentSkinURL = null;
-        let currentFileName = "minecraft_skin.png"; // Standardname
+        let currentUsername = "";
 
-        // 2. Den 3D-Viewer initialisieren
+        // 3D-Viewer Setup
         const viewer = new skinview3d.SkinViewer({
             container: document.getElementById("skin_container"),
             width: 250,
             height: 350
         });
 
-        // Ein bisschen Animation: Die Figur soll automatisch laufen und sich drehen
         viewer.animations.add(skinview3d.WalkingAnimation);
         viewer.animations.add(skinview3d.RotatingAnimation);
 
-        // 3. Wenn eine Datei ausgewählt wird...
-        document.getElementById('skin_upload').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            
-            if (file) {
-                // Den Original-Dateinamen speichern
-                currentFileName = file.name;
+        // Suchfunktion über die API
+        async function searchSkin() {
+            const username = document.getElementById("username_input").value.trim();
+            if (!username) return;
 
-                // Falls es schon eine URL gab, diese löschen (Speicher freimachen)
+            document.getElementById("loading_text").style.display = "block";
+            currentUsername = username;
+
+            // Wir nutzen mc-heads.net, um die direkte Skin-Datei abzugreifen
+            const apiUrl = `https://mc-heads.net/skin/${username}`;
+
+            try {
+                // Wir laden das Bild als "Blob" (Rohdaten) herunter, um es lokal verarbeiten zu können
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error("Fehler beim Laden");
+                }
+
+                const blob = await response.blob();
+                
+                // Alten Skin aus dem Speicher werfen
                 if (currentSkinURL) {
                     URL.revokeObjectURL(currentSkinURL);
                 }
 
-                // Eine temporäre URL aus der hochgeladenen 2D-Datei erstellen
-                currentSkinURL = URL.createObjectURL(file);
+                // Neue URL für das 3D-Modell generieren
+                currentSkinURL = URL.createObjectURL(blob);
 
-                // Den 3D-Viewer anweisen, dieses Bild als Textur zu laden
+                // In den Viewer laden
                 viewer.loadSkin(currentSkinURL);
 
-                // Den Download-Button aktivieren
+                // Download freischalten
                 document.getElementById('download_btn').disabled = false;
-            }
-        });
+                document.getElementById("loading_text").style.display = "none";
 
-        // 4. Die Download-Funktion (Minecraft.net kompatibel)
+            } catch (error) {
+                document.getElementById("loading_text").style.display = "none";
+                alert(`Der Skin für "${username}" konnte nicht gefunden werden. Hast du dich vertippt?`);
+            }
+        }
+
+        // Die fertige Minecraft.net Datei herunterladen
         function downloadSkin() {
             if (!currentSkinURL) return;
 
-            // Wir erstellen einen unsichtbaren Link, geben ihm die 2D-Originaldatei
-            // und tun per JavaScript so, als würde jemand darauf klicken.
             const a = document.createElement("a");
             a.href = currentSkinURL;
-            a.download = currentFileName; // Nutzt den gleichen Namen wie beim Upload
+            // Die Datei wird nach dem Spieler benannt (z.B. "Thies_skin.png")
+            a.download = `${currentUsername}_skin.png`; 
             
             document.body.appendChild(a);
             a.click();
