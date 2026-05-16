@@ -42,31 +42,17 @@
         h1 {
             color: #f8fafc;
             margin-top: 0;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             font-size: 28px;
             font-weight: 700;
         }
 
-        #skin_container {
-            width: 250px;
-            height: 350px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 16px;
-            margin-bottom: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            overflow: hidden;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        /* --- SUCHFELD & BUTTONS --- */
+        /* --- 1. SUCHFELD (Jetzt ganz oben) --- */
         .search-box {
             display: flex;
             gap: 10px;
             width: 100%;
-            margin-bottom: 15px;
+            margin-bottom: 25px; /* Abstand nach unten zur Figur */
         }
 
         input[type="text"] {
@@ -102,6 +88,22 @@
             transform: translateY(-2px);
         }
 
+        /* --- 2. 3D FIGUR (In der Mitte) --- */
+        #skin_container {
+            width: 250px;
+            height: 350px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            margin-bottom: 25px; /* Abstand nach unten zum Download-Button */
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- 3. DOWNLOAD BUTTON (Ganz unten) --- */
         .btn-download {
             width: 100%;
             background: linear-gradient(135deg, #10b981, #059669);
@@ -135,16 +137,19 @@
     <div class="container">
         <h1>Skin Suche 🔍</h1>
         
+        <!-- 1. SUCHE -->
+        <div class="search-box">
+            <!-- ID umbenannt, damit Bitwarden uns in Ruhe lässt -->
+            <input type="text" id="player_search_box" placeholder="z.B. Thies" autocomplete="off" spellcheck="false" data-lpignore="true" onkeydown="if(event.key === 'Enter') searchSkin()">
+            <button class="btn-search" onclick="searchSkin()">Suchen</button>
+        </div>
+
+        <!-- 2. 3D FIGUR -->
         <div id="skin_container">
             <span id="loading_text" style="color: #64748b; font-weight: bold; display: none;">Lädt Skin...</span>
         </div>
 
-        <div class="search-box">
-            <!-- Namen eingeben. Enter-Taste löst die Suche auch aus. -->
-            <input type="text" id="username_input" placeholder="z.B. Thies" onkeydown="if(event.key === 'Enter') searchSkin()">
-            <button class="btn-search" onclick="searchSkin()">Suchen</button>
-        </div>
-
+        <!-- 3. DOWNLOAD -->
         <button class="btn-download" id="download_btn" onclick="downloadSkin()" disabled>
             📥 Skin herunterladen
         </button>
@@ -164,19 +169,19 @@
         viewer.animations.add(skinview3d.WalkingAnimation);
         viewer.animations.add(skinview3d.RotatingAnimation);
 
-        // Suchfunktion über die API
+        // Suchfunktion über die neue Minotar-API
         async function searchSkin() {
-            const username = document.getElementById("username_input").value.trim();
+            const username = document.getElementById("player_search_box").value.trim();
             if (!username) return;
 
             document.getElementById("loading_text").style.display = "block";
             currentUsername = username;
 
-            // Wir nutzen mc-heads.net, um die direkte Skin-Datei abzugreifen
-            const apiUrl = `https://mc-heads.net/skin/${username}`;
+            // Wir nutzen jetzt minotar.net, das umgeht die Sicherheitsblockaden!
+            const apiUrl = `https://minotar.net/skin/${username}`;
 
             try {
-                // Wir laden das Bild als "Blob" (Rohdaten) herunter, um es lokal verarbeiten zu können
+                // Wir laden das Bild lokal herunter, damit wir es speichern können
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
@@ -185,18 +190,16 @@
 
                 const blob = await response.blob();
                 
-                // Alten Skin aus dem Speicher werfen
                 if (currentSkinURL) {
                     URL.revokeObjectURL(currentSkinURL);
                 }
 
-                // Neue URL für das 3D-Modell generieren
                 currentSkinURL = URL.createObjectURL(blob);
 
-                // In den Viewer laden
+                // Modell laden
                 viewer.loadSkin(currentSkinURL);
 
-                // Download freischalten
+                // Download aktivieren
                 document.getElementById('download_btn').disabled = false;
                 document.getElementById("loading_text").style.display = "none";
 
@@ -206,13 +209,12 @@
             }
         }
 
-        // Die fertige Minecraft.net Datei herunterladen
+        // Skin herunterladen
         function downloadSkin() {
             if (!currentSkinURL) return;
 
             const a = document.createElement("a");
             a.href = currentSkinURL;
-            // Die Datei wird nach dem Spieler benannt (z.B. "Thies_skin.png")
             a.download = `${currentUsername}_skin.png`; 
             
             document.body.appendChild(a);
