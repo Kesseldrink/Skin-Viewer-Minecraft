@@ -118,7 +118,7 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .btn-download:hover {
+        .btn-download:hover:not(:disabled) {
             background: linear-gradient(135deg, #34d399, #10b981);
             transform: translateY(-2px);
         }
@@ -139,14 +139,13 @@
         
         <!-- 1. SUCHE -->
         <div class="search-box">
+            <!-- Bitwarden Fix durch geänderte ID und autocomplete="off" -->
             <input type="text" id="player_search_box" placeholder="Spielername eingeben..." autocomplete="off" spellcheck="false" data-lpignore="true" onkeydown="if(event.key === 'Enter') searchSkin()">
             <button class="btn-search" onclick="searchSkin()">Suchen</button>
         </div>
 
         <!-- 2. 3D FIGUR -->
-        <div id="skin_container">
-            <span id="loading_text" style="color: #64748b; font-weight: bold; display: none;">Lädt Skin...</span>
-        </div>
+        <div id="skin_container"></div>
 
         <!-- 3. DOWNLOAD -->
         <button class="btn-download" id="download_btn" onclick="downloadSkin()" disabled>
@@ -155,7 +154,6 @@
     </div>
 
     <script>
-        let currentSkinURL = null;
         let currentUsername = "";
 
         // 3D-Viewer Setup
@@ -168,57 +166,28 @@
         viewer.animations.add(skinview3d.WalkingAnimation);
         viewer.animations.add(skinview3d.RotatingAnimation);
 
-        // Suchfunktion über die Ashcon API (Bulletproof gegen CORS)
-        async function searchSkin() {
+        function searchSkin() {
             const username = document.getElementById("player_search_box").value.trim();
             if (!username) return;
 
-            document.getElementById("loading_text").style.display = "block";
             currentUsername = username;
 
-            // Diese API liefert uns direkt den Base64-Textcode des Bildes
-            const apiUrl = `https://api.ashcon.app/mojang/v2/user/${username}`;
+            // Wir geben den Link direkt an das Modell weiter. Das klappt sofort.
+            const skinUrl = `https://minotar.net/skin/${username}`;
+            viewer.loadSkin(skinUrl);
 
-            try {
-                const response = await fetch(apiUrl);
-                
-                if (!response.ok) {
-                    throw new Error("Fehler beim Laden");
-                }
-
-                const data = await response.json();
-                
-                // Prüfen, ob der Spieler überhaupt einen Skin hat
-                if (!data.textures || !data.textures.skin || !data.textures.skin.data) {
-                    throw new Error("Kein Skin vorhanden");
-                }
-
-                // Wir bauen uns das Bild aus dem Text-Code zusammen (Base64)
-                const base64Skin = "data:image/png;base64," + data.textures.skin.data;
-                
-                currentSkinURL = base64Skin;
-
-                // Modell laden
-                viewer.loadSkin(currentSkinURL);
-
-                // Download aktivieren
-                document.getElementById('download_btn').disabled = false;
-                document.getElementById("loading_text").style.display = "none";
-
-            } catch (error) {
-                document.getElementById("loading_text").style.display = "none";
-                alert(`Der Skin für "${username}" konnte nicht gefunden werden. Hast du dich vertippt?`);
-                console.error("Fehlerdetails:", error);
-            }
+            // Download Button aktivieren
+            document.getElementById('download_btn').disabled = false;
         }
 
-        // Skin herunterladen
         function downloadSkin() {
-            if (!currentSkinURL) return;
+            if (!currentUsername) return;
+
+            // Minotar bietet einen speziellen Download-Link an, der den fertigen Skin direkt speichert!
+            const downloadUrl = `https://minotar.net/download/${currentUsername}`;
 
             const a = document.createElement("a");
-            a.href = currentSkinURL;
-            a.download = `${currentUsername}_skin.png`; 
+            a.href = downloadUrl;
             
             document.body.appendChild(a);
             a.click();
